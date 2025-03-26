@@ -1,4 +1,3 @@
-# query_handler.py - Handles LLM Queries and Chunk Processing
 
 from langchain_ollama import OllamaLLM
 
@@ -7,19 +6,31 @@ small_model = OllamaLLM(model="mistral", base_url="http://localhost:11434", syst
 main_model = OllamaLLM(model="llama3", base_url="http://localhost:11434", system="use_gpu:true")
 
 def query_models(prompt):
-    """Handles querying of both models and manages chunking efficiently."""
-    # Step 1: Use the small model to preprocess the request
-    small_summary = small_model.invoke(f"Summarize key points for better chunk processing: {prompt}")
-    
+    """Handles querying of both models and manages chunking efficiently while maintaining the original story intent."""
+
+    # Step 1: Use the small model to refine the prompt **without changing its meaning**
+    small_summary = small_model.invoke(
+        f"Improve the clarity of this story idea without altering its meaning: {prompt}"
+    )
+
     # Step 2: Break content into optimized chunks with overlapping context
     chunks = chunk_text(small_summary, chunk_size=500, overlap=100)
-    
+
     # Step 3: Feed chunks sequentially to the main model
     final_story = ""
     for chunk in chunks:
-        response = main_model.invoke(f"Ensure story consistency and coherence: {chunk}")
+        main_prompt = (
+            f"You are a highly skilled storyteller. You must strictly follow the given story concept "
+            f"and not deviate from it.\n\n"
+            f"### Story Concept: {prompt}\n\n"
+            f"Now, write an engaging and coherent next part of the story with strong character development, "
+            f"engaging dialogue, and vivid descriptions:\n\n"
+            f"{chunk}"
+        )
+
+        response = main_model.invoke(main_prompt)
         final_story += response + "\n"
-    
+
     return final_story.strip()
 
 
