@@ -1,61 +1,59 @@
 import streamlit as st
-from pipeline import generate_new_story, generate_new_episode
 import os
+from pipeline import generate_new_story, generate_new_episode
 
 def get_existing_stories():
-    """Fetch existing story titles from saved .txt files"""
+    """Fetch existing story titles from saved story directories."""
     os.makedirs("stories", exist_ok=True)  # Ensure the stories directory exists
-    return [f.replace('.txt', '') for f in os.listdir("stories") if f.endswith(".txt")]
+    stories = [d for d in os.listdir("stories") if os.path.isdir(os.path.join("stories", d))]
 
-st.title("AI-Powered Episodic Storytelling")
+    if not stories:
+        print("⚠️ No existing stories found!")
+        return None
 
-# Check for existing stories
-story_titles = get_existing_stories()
+    return stories
 
-# Button to trigger new story creation (only when there are existing stories)
-if story_titles:
-    if st.button("Create a New Story"):
-        st.session_state.show_new_story_input = True
-else:
-    # If no stories exist, force new story creation
-    st.session_state.show_new_story_input = True
+st.title("📚 AI-Powered Episodic Storytelling")
 
-# New Story Generation (Only shows input when triggered)
-if st.session_state.get("show_new_story_input", False):
-    st.subheader("Generate a New Story")
-    brief_text = st.text_area("Enter a brief idea for your new story:")
-    
-    if st.button("Generate Story"):
-        if brief_text.strip():
-            title, content = generate_new_story(brief_text)
-            with open(f"stories/{title}.txt", "w") as f:
-                f.write(content)
+# New Story Generation
+st.subheader("📝 Generate a New Story")
+brief_text = st.text_area("Enter a brief idea for your new story:")
+num_episodes = st.slider("Select the number of episodes to generate initially:", 1, 5, 1)
 
-            st.success(f"Story '{title}' created! You can now add episodes.")
-            st.subheader(f"📖 Generated Title: {title}")
-            
-            # Display the generated story immediately
-            st.text_area("Generated Story:", value=content, height=300, disabled=True)
-
-            # Hide the input box after generating a story
-            st.session_state.show_new_story_input = False
-        else:
-            st.error("Please enter a brief idea to generate a story.")
+if st.button("Create Story"):
+    if brief_text.strip():
+        try:
+            title = generate_new_story(brief_text, num_episodes)
+            if title:
+                st.success(f"✅ Story '{title}' created with {num_episodes} episodes! You can now continue it.")
+                st.subheader(f"📖 Generated Title: {title}")
+            else:
+                st.error("⚠️ No story title returned. Check query_models output.")
+        except Exception as e:
+            st.error(f"❌ Error generating story: {str(e)}")
+            print(f"❌ Error: {e}")
+    else:
+        st.error("⚠️ Please enter a brief idea to generate a story.")
 
 # New Episode Generation
-st.subheader("Generate a New Episode")
+st.subheader("📖 Generate a New Episode")
+story_titles = get_existing_stories()
+
 if story_titles:
     selected_story = st.selectbox("Select a story to continue:", story_titles)
     character_input = st.text_area("Describe any new characters for this episode (optional):")
-
-    if st.button("Generate Episode"):
-        new_episode = generate_new_episode(selected_story, character_input) 
-
-        with open(f"stories/{selected_story}.txt", "a") as f:
-            f.write(f"\n\n{new_episode}")
-
-        st.success("New episode added successfully!")
-
-        st.text_area("Generated Episode:", value=new_episode, height=300, disabled=True)
+    
+    if st.button("Generate Next Episode"):
+        try:
+            new_episode = generate_new_episode(selected_story, character_input)
+            if new_episode:
+                st.success("✅ New episode added successfully!")
+                st.subheader("📜 Generated Episode:")
+                st.write(new_episode)
+            else:
+                st.error("⚠️ No episode generated. Check query_models output.")
+        except Exception as e:
+            st.error(f"❌ Error generating episode: {str(e)}")
+            print(f"❌ Error: {e}")
 else:
-    st.warning("No stories found. Click 'Create a New Story' to begin.")
+    st.warning("⚠️ No stories found. Create a new story first.")

@@ -1,36 +1,41 @@
-from langchain_ollama import OllamaLLM
+import openai
+import os
+from config import OPENAI_API_KEY, SMALL_MODEL, BIG_MODEL
 
-# Initialize the small and main models
-small_model = OllamaLLM(model="mistral", base_url="http://localhost:11434", system="use_gpu:true")
-main_model = OllamaLLM(model="llama3", base_url="http://localhost:11434", system="use_gpu:true")
+class QueryHandler:
+    def __init__(self):
+        self.client = openai.Client(api_key=OPENAI_API_KEY)
 
-def query_models(prompt, is_new_story=True):
-    """
-    Handles querying of both models while ensuring AI follows the exact story concept
-    and does NOT generate multiple episodes at once.
-    """
+    def generate_response(self, prompt, model_type="small"):
+        model = SMALL_MODEL if model_type == "small" else BIG_MODEL
 
-    # Step 1: Process the prompt minimally with small_model (only if needed)
-    refined_prompt = small_model.invoke(
-        f"Refine this text for clarity while keeping its meaning exactly the same:\n\n{prompt}"
-    )
+        try:
+            response = self.client.chat.completions.create(
+                model=model,
+                messages=[{"role": "system", "content": "You are an AI storytelling assistant."},
+                          {"role": "user", "content": prompt}],
+                temperature=0.7,
+                max_tokens=1024
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            return f"Error: {str(e)}"
 
-    # Step 2: Define the instruction structure
-    if is_new_story:
-        main_prompt = (
-            f"You are a professional storyteller. Write **only Episode 1** of a multi-episode story.\n"
-            f"The story must strictly follow this theme: {refined_prompt}.\n"
-            f"**DO NOT** summarize the story or generate multiple episodes.\n"
-            f"Your output must be a well-written narrative containing only **one self-contained episode**."
+def query_models(prompt, model_type="small", use_chunks=False):
+    handler = QueryHandler()
+    
+    if model_type == "big" and use_chunks:
+        # Step 1: Use the small model to summarize data in chunks
+        chunked_summary = handler.generate_response(
+            f"Summarize the following information for the larger model:\n\n{prompt}",
+            model_type="small"
         )
-    else:
-        main_prompt = (
-            f"You are continuing a serialized story.\n"
-            f"Write **only the next episode** and ensure strong continuity with past events.\n"
-            f"Do not summarize or provide multiple episodes, just return **one new episode only**."
+
+        # Step 2: Pass the summarized chunks to the big model
+        final_response = handler.generate_response(
+            f"Use this summarized context to continue the story:\n\n{chunked_summary}",
+            model_type="big"
         )
+        return final_response
 
-    # Step 3: Generate the story (or episode)
-    final_story = main_model.invoke(main_prompt)
-
-    return final_story.strip()
+    return handler.generate_response(prompt, model_type)
