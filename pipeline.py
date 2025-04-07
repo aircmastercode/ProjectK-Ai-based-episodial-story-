@@ -79,9 +79,15 @@ def extract_characters(episode_content):
     """Extract character names from episode content."""
     # Use a more advanced prompt to extract character information
     character_prompt = f"""
-    Extract all character names and brief descriptions from this episode text. 
-    Format as JSON with name as key and description as value. 
-    Only include named characters with actual roles:
+    Extract all character information from this episode text that would help voice actors perform these roles.
+    For each character include:
+    - Name
+    - Voice characteristics (tone, accent, speech patterns)
+    - Emotional state and personality traits
+    - Key relationships to other characters
+
+    Format as JSON with name as key and detailed description as value.
+    Only include named characters with actual speaking roles or significant mentions:
     
     {episode_content}
     """
@@ -109,12 +115,13 @@ def generate_new_story(brief_text, num_episodes, genre="Adventure", audience="Ad
 
     # Generate a unique story title
     title_prompt = f"""
-    Generate a catchy, memorable story title (3-5 words) for this concept:
+    Generate a catchy, memorable story title (3-5 words) that would work well for a radio drama based on this concept:
     
     Concept: {brief_text}
     Genre: {genre}
     Audience: {audience}
     
+    Create a title that's ear-catching, easy to remember when heard (not read), and intriguing.
     Title:
     """
     
@@ -144,19 +151,28 @@ def generate_new_story(brief_text, num_episodes, genre="Adventure", audience="Ad
 
     # Create story bible/outline first
     bible_prompt = f"""
-    Create a comprehensive story bible for a multi-episode story:
-    
+    Create a comprehensive story bible for a radio-friendly, emotionally engaging multi-episode story:
+
     Title: {raw_title}
     Concept: {brief_text}
     Genre: {genre}
     Target Audience: {audience}
-    
-    Include:
-    1. Main plot arc summary
-    2. 3-5 primary characters with names and brief descriptions
-    3. Key settings or locations
-    4. Themes and motifs to develop
-    5. Basic episode structure for {num_episodes} episodes
+
+    Your story bible should create a vivid audio experience that captivates radio listeners by:
+
+    1. Main plot arc summary with emotional high points and moments of tension that will grip listeners
+    2. 3-5 primary characters with:
+       - Distinctive names that are easy to distinguish when heard (not read)
+       - Rich emotional backgrounds and motivations
+       - Unique vocal traits or speech patterns to help listeners identify them
+       - Clear relationships and dynamics between them
+    3. Vivid settings or locations with atmospheric details that listeners can imagine
+    4. Sound-rich scenes and scenarios (what sounds would enhance each scene?)
+    5. Themes and emotional motifs to develop across episodes
+    6. Basic episode structure for {num_episodes} episodes with cliffhangers and emotional hooks
+    7. Opportunities for audio drama techniques (inner monologues, ambient sounds, etc.)
+
+    Remember this is for audio storytelling, so dialogue and sound-rich scenes are more important than visual descriptions.
     """
     
     story_bible = query_models(bible_prompt, model_type="big", temperature=temperature * 0.9)
@@ -165,6 +181,12 @@ def generate_new_story(brief_text, num_episodes, genre="Adventure", audience="Ad
     # Extract and save character information to metadata
     character_prompt = f"""
     Extract the character information from this story bible.
+    For each character, provide details that would help voice actors bring them to life:
+    - Name
+    - Voice characteristics (tone, accent, speech patterns)
+    - Emotional background and personality
+    - Key relationships
+    
     Return as JSON with character names as keys and descriptions as values:
     
     {story_bible}
@@ -194,30 +216,46 @@ def generate_new_story(brief_text, num_episodes, genre="Adventure", audience="Ad
             if ep == 1:
                 # First episode establishes everything
                 episode_prompt = f"""
-                Write Episode {ep} for "{raw_title}".
-                
+                Write Episode {ep} for "{raw_title}" designed specifically for radio storytelling.
+
                 Story Concept: {brief_text}
                 Genre: {genre}
                 Audience: {audience}
-                
+
+                Following radio drama best practices:
+                1. Begin with a powerful hook or sound-rich scene that immediately captures attention
+                2. Introduce characters with distinctive voices and speech patterns that listeners can easily identify
+                3. Create emotional moments that resonate with listeners
+                4. Balance narration with engaging dialogue
+                5. Include moments where listeners can hear what characters are thinking or feeling
+                6. End with a hook that makes listeners eager for the next episode
+
                 Use the story bible to introduce main characters and establish the premise.
-                Length: {length} (about {length.lower()} length for reading)
-                
+                Length: {length} (about {length.lower()} length for reading aloud)
+
                 Start with "Episode {ep}:" and then the content.
                 """
             else:
                 # Later episodes build on previous ones
                 previous_summaries = "\n".join(episode_summaries)
                 episode_prompt = f"""
-                Write Episode {ep} for "{raw_title}".
-                
+                Write Episode {ep} for "{raw_title}" designed specifically for radio storytelling.
+
                 Previous episode summaries:
                 {previous_summaries}
-                
-                Continue developing the story and characters naturally.
-                Maintain consistent character voices and plot coherence.
-                Length: {length} (about {length.lower()} length for reading)
-                
+
+                Following radio drama best practices:
+                1. Begin with a brief recap of relevant previous events
+                2. Use distinctive dialogue and speech patterns for each character
+                3. Create emotional moments and conflicts that listeners can feel
+                4. Include sound-rich scenes that create a theater of the mind
+                5. Maintain a pace that keeps listeners engaged
+                6. End with a compelling hook for the next episode
+
+                Continue developing the story and characters with emotional depth.
+                Maintain consistent character voices and relationship dynamics.
+                Length: {length} (about {length.lower()} length for reading aloud)
+
                 Start with "Episode {ep}:" and then the content.
                 """
 
@@ -248,10 +286,11 @@ def generate_new_story(brief_text, num_episodes, genre="Adventure", audience="Ad
 
             # Generate episode summary for continuity
             summary_prompt = f"""
-            Summarize the key plot points, character development, and important events from this episode:
+            Summarize the key plot points, character development, emotional moments, and important events from this episode:
             
             {episode_content}
             
+            Focus on emotional beats and character growth that will be important for continuity.
             Keep the summary concise but include all plot-critical information.
             """
             
@@ -313,28 +352,36 @@ def generate_new_episode(story_title, character_input="", plot_direction="", mod
 
     # Build context for the model
     context = query_with_memory(
-        f"Prepare context for episode {next_episode_number} of '{story_title}'",
+        f"Prepare context for episode {next_episode_number} of '{story_title}', focusing on emotional continuity and character voices",
         memory_data,
         model_type="small"
     )
     
     # Create the episode prompt
-    tone_guidance = "Maintain the same tone and writing style as previous episodes." if maintain_tone else ""
+    tone_guidance = "Maintain the same tone, emotional rhythm, and writing style as previous episodes." if maintain_tone else ""
     
     episode_prompt = f"""
-    Write Episode {next_episode_number} for "{metadata.get('title', story_title)}".
-    
+    Write Episode {next_episode_number} for "{metadata.get('title', story_title)}" designed specifically for radio storytelling.
+
     Context (previous episodes and characters):
     {context}
-    
-    {f'New characters to introduce: {character_input}' if character_input else ''}
-    {f'Plot direction: {plot_direction}' if plot_direction else ''}
+
+    {f'New characters to introduce (with distinctive voices): {character_input}' if character_input else ''}
+    {f'Plot direction with emotional moments: {plot_direction}' if plot_direction else ''}
     {tone_guidance}
-    
-    Make sure there is natural character development and plot progression.
+
+    Radio storytelling guidelines:
+    1. Use rich, evocative dialogue that reveals character emotions
+    2. Create scenes with atmospheric sounds and emotional weight
+    3. Balance narration with character interactions
+    4. Maintain a rhythm that keeps listeners engaged
+    5. Include moments of tension, release, revelation, and emotional impact
+    6. End with a hook that makes listeners want more
+
+    Make sure listeners can feel the emotional journey of each character.
     Maintain continuity with previous episodes.
     Length: {metadata.get('episode_length', 'Medium')}
-    
+
     Start with "Episode {next_episode_number}:" and then the content.
     """
 
@@ -368,10 +415,11 @@ def generate_new_episode(story_title, character_input="", plot_direction="", mod
     
     # Generate episode summary
     summary_prompt = f"""
-    Summarize the key plot points, character development, and important events from this episode:
+    Summarize the key plot points, character development, emotional moments, and important events from this episode:
     
     {new_episode}
     
+    Focus on the emotional journey of characters and moments that will resonate with listeners.
     Keep the summary concise but include all plot-critical information.
     """
     

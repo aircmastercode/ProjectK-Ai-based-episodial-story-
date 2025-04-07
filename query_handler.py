@@ -29,7 +29,16 @@ class QueryHandler:
                 max_tokens = 1500 if model_type == "small" else 3000
             
             # Create system prompt based on the task
-            system_prompt = "You are an expert storyteller creating engaging narrative content. Your writing is detailed, creative, and maintains consistent character development and plot coherence."
+            system_prompt = """You are an expert radio dramatist and storyteller creating emotionally engaging narrative content for audio.
+
+Your writing specialties include:
+1. Creating distinctive character voices that are identifiable through dialogue alone
+2. Crafting sound-rich scenes that build a theater of the mind
+3. Developing emotional moments that resonate deeply with listeners
+4. Building tension and release with careful pacing and hooks
+5. Using narration and dialogue effectively for audio storytelling
+
+Your writing is detailed, emotionally resonant, and maintains consistent character voices throughout the narrative."""
             
             response = self.client.chat.completions.create(
                 model=model,
@@ -72,7 +81,13 @@ def process_large_prompt(prompt, model_type="big", temperature=0.7):
     # 2. Process each chunk with the small model for summarization
     chunk_summaries = []
     for i, chunk in enumerate(chunks):
-        summary_prompt = f"Summarize this portion of text while retaining all key information:\n\n{chunk}"
+        summary_prompt = f"""Summarize this portion of text while retaining all key emotional moments, character 
+        development, and plot points that would be important for radio storytelling:
+
+        {chunk}
+        
+        Focus on preserving dialogue patterns, emotional beats, and sound-rich scenes."""
+        
         summary = handler.generate_response(summary_prompt, "small", temperature=0.5)
         chunk_summaries.append(summary)
         logger.info(f"Processed chunk {i+1}/{len(chunks)}")
@@ -82,11 +97,12 @@ def process_large_prompt(prompt, model_type="big", temperature=0.7):
     
     # 4. Generate the final response with the preferred model
     final_prompt = f"""
-    Use the following summarized context to generate your response:
+    Use the following summarized context to generate your response for radio storytelling:
     
     {combined_summary}
     
-    Based on this information, please respond to the original request.
+    Based on this information, please respond to the original request, focusing on creating emotionally engaging content
+    with distinctive character voices and sound-rich scenes that will captivate radio listeners.
     """
     
     return handler.generate_response(final_prompt, model_type, temperature=temperature)
@@ -125,10 +141,11 @@ def query_with_memory(prompt, memory_data, model_type="small", temperature=0.7):
     
     # Create the full prompt with memory context
     full_prompt = f"""
-    Context:
+    Context for radio storytelling:
     {memory_context}
     
-    With this context in mind, please respond to:
+    With this context in mind and focusing on creating emotionally engaging audio content with distinctive character voices,
+    please respond to:
     {prompt}
     """
     
@@ -149,9 +166,9 @@ def format_memory_context(memory_data):
     if "genre" in memory_data and "audience" in memory_data:
         context_parts.append(f"Genre: {memory_data['genre']}, Target Audience: {memory_data['audience']}")
     
-    # Add character information
+    # Add character information with focus on voice and emotional traits
     if "characters" in memory_data and memory_data["characters"]:
-        character_section = ["Characters:"]
+        character_section = ["Characters (with voice traits and emotional backgrounds):"]
         for name, desc in memory_data["characters"].items():
             character_section.append(f"- {name}: {desc}")
         context_parts.append("\n".join(character_section))
@@ -164,7 +181,7 @@ def format_memory_context(memory_data):
         # Take the most recent MAX_MEMORY_EPISODES
         recent_summaries = summaries_split[-MAX_MEMORY_EPISODES:] if len(summaries_split) > MAX_MEMORY_EPISODES else summaries_split
         
-        context_parts.append("Previous Episode Summaries:")
+        context_parts.append("Previous Episode Emotional Arcs and Key Moments:")
         context_parts.append("\n".join(recent_summaries))
     
     # Add story bible highlights if available
@@ -172,14 +189,18 @@ def format_memory_context(memory_data):
         # Extract just the important parts from the story bible
         bible_prompt = f"""
         Extract the most crucial elements from this story bible that would be necessary
-        for maintaining consistency in future episodes. Focus on themes, character arcs,
-        and major plot points:
+        for creating emotionally engaging radio episodes with consistent character voices.
+        Focus on:
+        1. Character voice traits and emotional backgrounds
+        2. Sound-rich scenes and atmospheric elements
+        3. Emotional themes and character arcs
+        4. Key relationship dynamics
         
         {memory_data["story_bible"][:2000]}  # Limit length for efficiency
         """
         
         bible_summary = query_models(bible_prompt, "small", temperature=0.5)
-        context_parts.append("Story Bible Highlights:")
+        context_parts.append("Story Bible Highlights for Radio Storytelling:")
         context_parts.append(bible_summary)
     
     return "\n\n".join(context_parts)

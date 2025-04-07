@@ -12,7 +12,7 @@ def main():
     st.set_page_config(page_title="AI Episodic Storyteller", layout="wide")
     
     st.title("📚 AI-Powered Episodic Storytelling")
-    st.sidebar.image("https://via.placeholder.com/150x80?text=Story+AI", width=150)
+    st.sidebar.image("ai.jpg.webp", width=150)
     
     # App sections in sidebar
     app_mode = st.sidebar.radio(
