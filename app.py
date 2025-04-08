@@ -1,6 +1,10 @@
 import streamlit as st
 import os
 from pipeline import generate_new_story, generate_new_episode, get_story_content
+from config import USER_CONFIG, save_user_config, reload_config, get_model_provider
+
+# Set page config at the very top of the script, before any other st commands
+st.set_page_config(page_title="AI Episodic Storyteller", layout="wide")
 
 def get_existing_stories():
     """Fetch existing story titles from saved story directories."""
@@ -9,23 +13,146 @@ def get_existing_stories():
     return stories
 
 def main():
-    st.set_page_config(page_title="AI Episodic Storyteller", layout="wide")
-    
     st.title("📚 AI-Powered Episodic Storytelling")
     st.sidebar.image("ai.jpg.webp", width=150)
     
-    # App sections in sidebar
-    app_mode = st.sidebar.radio(
-        "Choose Mode:",
-        ["Create Story", "Continue Story", "Read Story"]
+    # Configuration section in sidebar
+    with st.sidebar:
+        st.header("⚙️ Configuration")
+        configure_models()
+        
+        st.markdown("---")
+        
+        # App sections in sidebar
+        # Initialize session state for navigation if not present
+        if 'app_mode' not in st.session_state:
+            st.session_state.app_mode = "Create Story"
+        
+        # Use session_state for the radio button to maintain state across reruns
+        st.radio(
+            "Choose Mode:",
+            ["Create Story", "Continue Story", "Read Story"],
+            key="app_mode"
+        )
+    
+    # Now use the session state to determine which UI to show
+    if st.session_state.app_mode == "Create Story":
+        create_story_ui()
+    elif st.session_state.app_mode == "Continue Story":
+        continue_story_ui()
+    elif st.session_state.app_mode == "Read Story":
+        read_story_ui()
+
+def configure_models():
+    """UI for configuring model settings."""
+    st.subheader("Model Settings")
+    
+    # Model provider selection
+    current_provider = USER_CONFIG.get("model_provider", "ollama")
+    selected_provider = st.selectbox(
+        "Model Provider:", 
+        options=["ollama", "openai"],
+        index=0 if current_provider == "ollama" else 1,
+        help="Select 'ollama' for offline local models or 'openai' for cloud-based models"
     )
     
-    if app_mode == "Create Story":
-        create_story_ui()
-    elif app_mode == "Continue Story":
-        continue_story_ui()
-    elif app_mode == "Read Story":
-        read_story_ui()
+    config_changed = False
+    
+    if selected_provider != current_provider:
+        USER_CONFIG["model_provider"] = selected_provider
+        config_changed = True
+    
+    # Provider-specific settings
+    if selected_provider == "openai":
+        current_api_key = USER_CONFIG.get("openai_api_key", "")
+        api_key = st.text_input(
+            "OpenAI API Key:", 
+            value=current_api_key,
+            type="password",
+            help="Enter your OpenAI API key for GPT models"
+        )
+        
+        if api_key != current_api_key:
+            USER_CONFIG["openai_api_key"] = api_key
+            config_changed = True
+            
+        # Model selection for OpenAI
+        with st.expander("Advanced Model Settings", expanded=False):
+            small_model = st.selectbox(
+                "Small Model:",
+                options=["gpt-3.5-turbo", "gpt-3.5-turbo-16k"],
+                index=0,
+                help="Used for shorter tasks and summaries"
+            )
+            
+            big_model = st.selectbox(
+                "Big Model:",
+                options=["gpt-4-turbo", "gpt-4", "gpt-3.5-turbo-16k"],
+                index=0,
+                help="Used for generating full episodes and stories"
+            )
+            
+            if small_model != USER_CONFIG.get("small_model_map", {}).get("openai"):
+                if "small_model_map" not in USER_CONFIG:
+                    USER_CONFIG["small_model_map"] = {}
+                USER_CONFIG["small_model_map"]["openai"] = small_model
+                config_changed = True
+                
+            if big_model != USER_CONFIG.get("big_model_map", {}).get("openai"):
+                if "big_model_map" not in USER_CONFIG:
+                    USER_CONFIG["big_model_map"] = {}
+                USER_CONFIG["big_model_map"]["openai"] = big_model
+                config_changed = True
+    
+    else:  # ollama
+        current_url = USER_CONFIG.get("ollama_base_url", "http://localhost:11434")
+        base_url = st.text_input(
+            "Ollama API URL:",
+            value=current_url,
+            help="URL of your local Ollama server (default: http://localhost:11434)"
+        )
+        
+        if base_url != current_url:
+            USER_CONFIG["ollama_base_url"] = base_url
+            config_changed = True
+        
+        # Model selection for Ollama
+        with st.expander("Advanced Model Settings", expanded=False):
+            # Get list of available models from the system
+            small_model = st.selectbox(
+                "Small Model:",
+                options=["mistral", "llama2", "gemma", "phi"],
+                index=0,
+                help="Lighter model used for shorter tasks"
+            )
+            
+            big_model = st.selectbox(
+                "Big Model:",
+                options=["llama3", "mixtral", "llama2:70b", "claude"],
+                index=0,
+                help="More powerful model used for generating stories"
+            )
+            
+            if small_model != USER_CONFIG.get("small_model_map", {}).get("ollama"):
+                if "small_model_map" not in USER_CONFIG:
+                    USER_CONFIG["small_model_map"] = {}
+                USER_CONFIG["small_model_map"]["ollama"] = small_model
+                config_changed = True
+                
+            if big_model != USER_CONFIG.get("big_model_map", {}).get("ollama"):
+                if "big_model_map" not in USER_CONFIG:
+                    USER_CONFIG["big_model_map"] = {}
+                USER_CONFIG["big_model_map"]["ollama"] = big_model
+                config_changed = True
+    
+    # Save configuration if changes were made
+    if config_changed:
+        if save_user_config(USER_CONFIG):
+            # Force configuration reload
+            reload_config()
+            st.success(f"✅ Settings saved! Now using: {get_model_provider()} provider.")
+        else:
+            st.error("❌ Failed to save settings.")
 
 def create_story_ui():
     st.header("📝 Create a New Story")
@@ -74,6 +201,11 @@ def create_story_ui():
     
     if st.button("🪄 Generate Story", use_container_width=True):
         if brief_text.strip():
+            # Check if using OpenAI and API key is missing
+            if get_model_provider() == "openai" and not USER_CONFIG.get("openai_api_key"):
+                st.error("⚠️ OpenAI API Key is required when using OpenAI models. Please add it in the configuration section.")
+                return
+                
             with st.spinner("Creating your story... this may take a minute"):
                 try:
                     title = generate_new_story(
@@ -93,7 +225,9 @@ def create_story_ui():
                         
                         # Show button to view the story
                         if st.button("Read Your Story Now"):
-                            st.switch_page("Read Story")
+                            # Set session state to navigate to Read Story mode
+                            st.session_state.app_mode = "Read Story"
+                            st.experimental_rerun()
                     else:
                         st.error("⚠️ Story generation failed. Please try again.")
                 except Exception as e:
@@ -137,6 +271,11 @@ def continue_story_ui():
             creativity = st.slider("Creativity level:", 0.0, 1.0, 0.7)
     
     if st.button("🚀 Generate Next Episode", use_container_width=True):
+        # Check if using OpenAI and API key is missing
+        if get_model_provider() == "openai" and not USER_CONFIG.get("openai_api_key"):
+            st.error("⚠️ OpenAI API Key is required when using OpenAI models. Please add it in the configuration section.")
+            return
+            
         with st.spinner("Crafting the next chapter of your story..."):
             try:
                 new_episode = generate_new_episode(
@@ -156,7 +295,9 @@ def continue_story_ui():
                     
                     if st.button("Read Full Story"):
                         st.session_state.current_story = selected_story
-                        st.switch_page("Read Story")
+                        # Navigate to Read Story mode
+                        st.session_state.app_mode = "Read Story"
+                        st.experimental_rerun()
                 else:
                     st.error("⚠️ Episode generation failed. Please try again.")
             except Exception as e:
@@ -206,7 +347,9 @@ def read_story_ui():
         with col1:
             if st.button("✏️ Continue This Story"):
                 st.session_state.current_story = selected_story
-                st.switch_page("Continue Story")
+                # Navigate to Continue Story mode
+                st.session_state.app_mode = "Continue Story"
+                st.experimental_rerun()
         with col2:
             if st.button("📊 Story Analytics"):
                 # Basic analytics could be added here

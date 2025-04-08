@@ -1,0 +1,13 @@
+{
+  "model_provider": "openai",
+  "openai_api_key": "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",
+  "ollama_base_url": "http://localhost:11434",
+  "small_model_map": {
+    "openai": "gpt-3.5-turbo",
+    "ollama": "mistral"
+  },
+  "big_model_map": {
+    "openai": "gpt-4-turbo",
+    "ollama": "llama3"
+  }
+}
